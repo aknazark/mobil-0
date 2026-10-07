@@ -1,0 +1,283 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+      - name: Generate project files
+        run: |
+          set -e
+          mkdir -p "$(dirname 'app/build.gradle.kts')"
+          cat > 'app/build.gradle.kts' <<'EOF_FILE'
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+              id("org.jetbrains.kotlin.plugin.compose")
+          }
+
+          android {
+              namespace = "com.example.helloandroid"
+              compileSdk = 35
+
+              defaultConfig {
+                  applicationId = "com.example.helloandroid"
+                  minSdk = 24
+                  targetSdk = 35
+                  versionCode = 1
+                  versionName = "1.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              buildFeatures { compose = true }
+          }
+
+          // Один и тот же JVM target для Java и Kotlin
+          kotlin { jvmToolchain(17) }
+
+          dependencies {
+              implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.activity:activity-compose:1.9.2")
+          }
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/AndroidManifest.xml')"
+          cat > 'app/src/main/AndroidManifest.xml' <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <application
+                  android:allowBackup="true"
+                  android:icon="@mipmap/ic_launcher"
+                  android:label="@string/app_name"
+                  android:theme="@style/Theme.HelloAndroid">
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/java/com/example/helloandroid/MainActivity.kt')"
+          cat > 'app/src/main/java/com/example/helloandroid/MainActivity.kt' <<'EOF_FILE'
+          package com.example.helloandroid
+
+          import android.os.Bundle
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.setContent
+          import androidx.compose.foundation.layout.Arrangement
+          import androidx.compose.foundation.layout.Column
+          import androidx.compose.foundation.layout.Spacer
+          import androidx.compose.foundation.layout.fillMaxSize
+          import androidx.compose.foundation.layout.height
+          import androidx.compose.foundation.layout.padding
+          import androidx.compose.material3.Button
+          import androidx.compose.material3.CenterAlignedTopAppBar
+          import androidx.compose.material3.ExperimentalMaterial3Api
+          import androidx.compose.material3.MaterialTheme
+          import androidx.compose.material3.OutlinedButton
+          import androidx.compose.material3.Scaffold
+          import androidx.compose.material3.Text
+          import androidx.compose.runtime.Composable
+          import androidx.compose.runtime.getValue
+          import androidx.compose.runtime.mutableStateOf
+          import androidx.compose.runtime.saveable.rememberSaveable
+          import androidx.compose.runtime.setValue
+          import androidx.compose.ui.Alignment
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.res.stringResource
+          import androidx.compose.ui.unit.dp
+          import java.text.SimpleDateFormat
+          import java.util.Date
+          import java.util.Locale
+
+          class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      MaterialTheme {
+                          CounterScreen()
+                      }
+                  }
+              }
+          }
+
+          @OptIn(ExperimentalMaterial3Api::class)
+          @Composable
+          fun CounterScreen() {
+              var count by rememberSaveable { mutableStateOf(0) }
+              var lastPress by rememberSaveable { mutableStateOf("") }
+
+              fun stamp() {
+                  lastPress = SimpleDateFormat("dd.MM.yyyy HH:mm:ss", Locale.getDefault()).format(Date())
+              }
+
+              Scaffold(
+                  topBar = {
+                      CenterAlignedTopAppBar(title = { Text(stringResource(R.string.top_title)) })
+                  }
+              ) { inner ->
+                  Column(
+                      modifier = Modifier
+                          .padding(inner)
+                          .fillMaxSize(),
+                      horizontalAlignment = Alignment.CenterHorizontally,
+                      verticalArrangement = Arrangement.Center
+                  ) {
+                      Text(
+                          text = stringResource(R.string.counter, count),
+                          style = MaterialTheme.typography.headlineMedium
+                      )
+                      Spacer(Modifier.height(16.dp))
+                      Button(onClick = { count++; stamp() }) {
+                          Text(stringResource(R.string.plus))
+                      }
+                      Spacer(Modifier.height(8.dp))
+                      // Минус: нельзя уйти в отрицательные значения
+                      OutlinedButton(
+                          onClick = { if (count > 0) count--; stamp() },
+                          enabled = count > 0
+                      ) {
+                          Text(stringResource(R.string.minus))
+                      }
+                      Spacer(Modifier.height(8.dp))
+                      OutlinedButton(onClick = { count = 0; stamp() }) {
+                          Text(stringResource(R.string.reset))
+                      }
+                      Spacer(Modifier.height(24.dp))
+                      Text(
+                          text = if (lastPress.isEmpty()) stringResource(R.string.no_press)
+                          else stringResource(R.string.last_press, lastPress)
+                      )
+                  }
+              }
+          }
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/drawable/ic_launcher_foreground.xml')"
+          cat > 'app/src/main/res/drawable/ic_launcher_foreground.xml' <<'EOF_FILE'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:pathData="M54,34L54,74M34,54L74,54"
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="9"
+                  android:strokeLineCap="round" />
+          </vector>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml')"
+          cat > 'app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml' <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@color/ic_launcher_background" />
+              <foreground android:drawable="@drawable/ic_launcher_foreground" />
+          </adaptive-icon>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/mipmap-anydpi/ic_launcher.xml')"
+          cat > 'app/src/main/res/mipmap-anydpi/ic_launcher.xml' <<'EOF_FILE'
+          <vector xmlns:android="http://schemas.android.com/apk/res/android"
+              android:width="108dp"
+              android:height="108dp"
+              android:viewportWidth="108"
+              android:viewportHeight="108">
+              <path
+                  android:fillColor="#1565C0"
+                  android:pathData="M0,0h108v108h-108z" />
+              <path
+                  android:pathData="M54,34L54,74M34,54L74,54"
+                  android:strokeColor="#FFFFFF"
+                  android:strokeWidth="9"
+                  android:strokeLineCap="round" />
+          </vector>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/values-kk/strings.xml')"
+          cat > 'app/src/main/res/values-kk/strings.xml' <<'EOF_FILE'
+          <resources>
+              <string name="app_name">HelloAndroid</string>
+              <string name="top_title">Hello, Android</string>
+              <string name="counter">Санауыш: %1$d</string>
+              <string name="plus">Қосу</string>
+              <string name="minus">Азайту</string>
+              <string name="reset">Тастау</string>
+              <string name="last_press">Соңғы басу: %1$s</string>
+              <string name="no_press">Соңғы басу: —</string>
+          </resources>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/values/colors.xml')"
+          cat > 'app/src/main/res/values/colors.xml' <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <color name="ic_launcher_background">#1565C0</color>
+          </resources>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/values/strings.xml')"
+          cat > 'app/src/main/res/values/strings.xml' <<'EOF_FILE'
+          <resources>
+              <string name="app_name">HelloAndroid</string>
+              <string name="top_title">Hello, Android</string>
+              <string name="counter">Счётчик: %1$d</string>
+              <string name="plus">Плюс</string>
+              <string name="minus">Минус</string>
+              <string name="reset">Сброс</string>
+              <string name="last_press">Последнее нажатие: %1$s</string>
+              <string name="no_press">Последнее нажатие: —</string>
+          </resources>
+          EOF_FILE
+          mkdir -p "$(dirname 'app/src/main/res/values/themes.xml')"
+          cat > 'app/src/main/res/values/themes.xml' <<'EOF_FILE'
+          <?xml version="1.0" encoding="utf-8"?>
+          <resources>
+              <style name="Theme.HelloAndroid" parent="android:Theme.Material.Light.NoActionBar" />
+          </resources>
+          EOF_FILE
+          mkdir -p "$(dirname 'build.gradle.kts')"
+          cat > 'build.gradle.kts' <<'EOF_FILE'
+          plugins {
+              id("com.android.application") version "8.6.1" apply false
+              id("org.jetbrains.kotlin.android") version "2.0.20" apply false
+              id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
+          }
+          EOF_FILE
+          mkdir -p "$(dirname 'gradle.properties')"
+          cat > 'gradle.properties' <<'EOF_FILE'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          android.nonTransitiveRClass=true
+          EOF_FILE
+          mkdir -p "$(dirname 'settings.gradle.kts')"
+          cat > 'settings.gradle.kts' <<'EOF_FILE'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "HelloAndroid"
+          include(":app")
+          EOF_FILE
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HelloAndroid-debug
+          path: app/build/outputs/apk/debug/*.apk
